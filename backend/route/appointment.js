@@ -138,8 +138,6 @@ router.patch("/:id/cancel", auth, role("patient"), async (req, res) => {
 
 // Update on Payment
 
-
-
 router.patch("/:id/payment", auth, async (req, res) => {
   try {
     const { payment_status, payment_method, transaction_id } = req.body;
