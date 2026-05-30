@@ -78,3 +78,4 @@ export function AppointmentCard({
     </div>
   );
 }
+// test to know if it is the correct code for the appointment card component in the frontend of the application.
