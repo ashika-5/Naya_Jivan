@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require("../config/db");
 const { auth, role } = require("../middleware/auth");
 
-// Book appointment (patient)
+// Book appointment (patient only)
 router.post("/", auth, role("patient"), async (req, res) => {
   try {
     const {
@@ -14,13 +14,19 @@ router.post("/", auth, role("patient"), async (req, res) => {
       notes,
       amount,
     } = req.body;
-    // Check slot availability
+
+    // Check slot availability — no double booking
     const [existing] = await db.execute(
-      `SELECT id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status NOT IN ('cancelled','rejected')`,
+      `SELECT id FROM appointments
+       WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ?
+       AND status NOT IN ('cancelled','rejected')`,
       [doctor_id, appointment_date, appointment_time],
     );
     if (existing.length > 0)
-      return res.status(400).json({ message: "This slot is already booked" });
+      return res.status(400).json({
+        message:
+          "This time slot is already booked. Please choose another slot.",
+      });
 
     const [result] = await db.execute(
       `INSERT INTO appointments (patient_id, doctor_id, hospital_id, appointment_date, appointment_time, notes, amount, status)
@@ -36,7 +42,7 @@ router.post("/", auth, role("patient"), async (req, res) => {
       ],
     );
 
-    // Create notification for doctor
+    // Notify doctor if they have a user account
     const [doctor] = await db.execute(
       "SELECT user_id, name FROM doctors WHERE id = ?",
       [doctor_id],
@@ -61,25 +67,40 @@ router.post("/", auth, role("patient"), async (req, res) => {
   }
 });
 
-// Get patient's appointments
+// Get appointments for the logged-in user (patient or doctor)
 router.get("/my", auth, async (req, res) => {
   try {
     let query, params;
     if (req.user.role === "patient") {
-      query = `SELECT a.*, d.name as doctor_name, d.specialization, d.avatar as doctor_avatar,
-               h.name as hospital_name FROM appointments a
-               LEFT JOIN doctors d ON a.doctor_id = d.id
-               LEFT JOIN hospitals h ON a.hospital_id = h.id
-               WHERE a.patient_id = ? ORDER BY a.appointment_date DESC`;
+      query = `
+        SELECT a.*, d.name as doctor_name, d.specialization, d.avatar as doctor_avatar,
+               h.name as hospital_name
+        FROM appointments a
+        LEFT JOIN doctors d ON a.doctor_id = d.id
+        LEFT JOIN hospitals h ON a.hospital_id = h.id
+        WHERE a.patient_id = ?
+        ORDER BY a.appointment_date DESC`;
       params = [req.user.id];
     } else if (req.user.role === "doctor") {
-      query = `SELECT a.*, u.name as patient_name, u.phone as patient_phone,
-               h.name as hospital_name FROM appointments a
-               LEFT JOIN users u ON a.patient_id = u.id
-               LEFT JOIN hospitals h ON a.hospital_id = h.id
-               WHERE a.doctor_id = (SELECT id FROM doctors WHERE user_id = ?)
-               ORDER BY a.appointment_date DESC`;
+      query = `
+        SELECT a.*, u.name as patient_name, u.phone as patient_phone,
+               h.name as hospital_name
+        FROM appointments a
+        LEFT JOIN users u ON a.patient_id = u.id
+        LEFT JOIN hospitals h ON a.hospital_id = h.id
+        WHERE a.doctor_id = (SELECT id FROM doctors WHERE user_id = ?)
+        ORDER BY a.appointment_date DESC`;
       params = [req.user.id];
+    } else {
+      // Admin can see all
+      query = `
+        SELECT a.*, u.name as patient_name, d.name as doctor_name, h.name as hospital_name
+        FROM appointments a
+        LEFT JOIN users u ON a.patient_id = u.id
+        LEFT JOIN doctors d ON a.doctor_id = d.id
+        LEFT JOIN hospitals h ON a.hospital_id = h.id
+        ORDER BY a.created_at DESC`;
+      params = [];
     }
     const [appointments] = await db.execute(query, params);
     res.json(appointments);
@@ -88,7 +109,7 @@ router.get("/my", auth, async (req, res) => {
   }
 });
 
-// Update appointment status (doctor)
+// Update appointment status (doctor or admin)
 router.patch("/:id/status", auth, role("doctor", "admin"), async (req, res) => {
   try {
     const { status } = req.body;
@@ -116,7 +137,6 @@ router.patch("/:id/status", auth, role("doctor", "admin"), async (req, res) => {
         ],
       );
     }
-
     res.json({ message: "Status updated" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -127,8 +147,8 @@ router.patch("/:id/status", auth, role("doctor", "admin"), async (req, res) => {
 router.patch("/:id/cancel", auth, role("patient"), async (req, res) => {
   try {
     await db.execute(
-      "UPDATE appointments SET status = ? WHERE id = ? AND patient_id = ?",
-      ["cancelled", req.params.id, req.user.id],
+      "UPDATE appointments SET status = 'cancelled' WHERE id = ? AND patient_id = ?",
+      [req.params.id, req.user.id],
     );
     res.json({ message: "Appointment cancelled" });
   } catch (err) {
@@ -136,8 +156,7 @@ router.patch("/:id/cancel", auth, role("patient"), async (req, res) => {
   }
 });
 
-// Update on Payment
-
+// Update payment info
 router.patch("/:id/payment", auth, async (req, res) => {
   try {
     const { payment_status, payment_method, transaction_id } = req.body;
@@ -152,9 +171,3 @@ router.patch("/:id/payment", auth, async (req, res) => {
 });
 
 module.exports = router;
-qs;
-nabj[an];
-abort;
-lbw;
-sbnspjn[p];
-AudioBufferSourceNode;
